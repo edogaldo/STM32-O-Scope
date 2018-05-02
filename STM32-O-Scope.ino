@@ -38,9 +38,6 @@ Adafruit Libraries released under their specific licenses Copyright (c) 2013 Ada
 // information can be found in the UTouch library documentation.
 // 
 
-// This makes no sense.. (BUG) but if you don't actually have a touch screen, you need to declere it anyway then  #undef it below. 
-#define TOUCH_SCREEN_AVAILABLE
-
 #if defined TOUCH_SCREEN_AVAILABLE
 #define TOUCH_ORIENTATION  LANDSCAPE
 // URTouch Library
@@ -48,9 +45,6 @@ Adafruit Libraries released under their specific licenses Copyright (c) 2013 Ada
 #include <URTouch.h>
 URTouch  myTouch( PB12, PB13, PB14, PB15, PA8);
 #endif
-
-// This makes no sense.. (BUG) but if you don't actually have a touch screen, #undef it here. 
-#undef TOUCH_SCREEN_AVAILABLE
 
 
 // RTC and NVRam initialisation
