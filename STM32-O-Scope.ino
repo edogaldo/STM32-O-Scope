@@ -9,6 +9,9 @@ Adafruit Libraries released under their specific licenses Copyright (c) 2013 Ada
 
 */
 
+//#define USE_ILI9341
+#if defined(USE_ILI9341)
+
 #include "Adafruit_ILI9341_STM.h"
 #include "Adafruit_GFX_AS.h"
 
@@ -38,40 +41,46 @@ Adafruit Libraries released under their specific licenses Copyright (c) 2013 Ada
 // information can be found in the UTouch library documentation.
 // 
 
-#if defined TOUCH_SCREEN_AVAILABLE
+
+#if defined(USE_TOUCH_SCREEN)
+
+#define TOUCH_SCREEN_AVAILABLE
 #define TOUCH_ORIENTATION  LANDSCAPE
 // URTouch Library
 // http://www.rinkydinkelectronics.com/library.php?id=93
 #include <URTouch.h>
 URTouch  myTouch( PB12, PB13, PB14, PB15, PA8);
-#endif
-
-
-// RTC and NVRam initialisation
-
-#include "RTClock.h"
-RTClock rt (RTCSEL_LSE); // initialise
-uint32 tt;
-
-// Define the Base address of the RTC  registers (battery backed up CMOS Ram), so we can use them for config of touch screen and other calibration.
-// See http://stm32duino.com/viewtopic.php?f=15&t=132&hilit=rtc&start=40 for a more details about the RTC NVRam
-// 10x 16 bit registers are available on the STM32F103CXXX more on the higher density device.
-
-#define BKP_REG_BASE   (uint32_t *)(0x40006C00 +0x04)
-
-// Defined for power and sleep functions pwr.h and scb.h
-#include <libmaple/pwr.h>
-#include <libmaple/scb.h>
-
 
 // #define NVRam register names for the touch calibration values.
 #define  TOUCH_CALIB_X 0
 #define  TOUCH_CALIB_Y 1
 #define  TOUCH_CALIB_Z 2
 
+#endif
+
+#endif
+
+
+// RTC and NVRam initialisation
+
+#if defined(USE_RTC)
+#include "RTClock.h"
+RTClock rt (RTCSEL_LSE); // initialise
+#endif
+uint32 tt;
+
+// Defined for power and sleep functions pwr.h and scb.h
+#include <libmaple/dma.h>
+#include <libmaple/pwr.h>
+#include <libmaple/scb.h>
+
+
+#if defined(USE_TIME_H)
 // Time library - https://github.com/PaulStoffregen/Time
 #include "Time.h" //If you have issues with the default Time library change the name of this library to Time1 for example.
-#define TZ    "UTC+1"
+#endif
+
+#define TZ    UTC+1
 
 // End RTC and NVRam initialization
 
@@ -93,6 +102,7 @@ variants/generic_stm32f103c/board/board.h:#define BOARD_SPI2_SCK_PIN        PB13
 
 */
 
+#if defined(USE_ILI9341)
 // Additional  display specific signals (i.e. non SPI) for STM32F103C8T6 (Wire colour)
 #define TFT_DC      PA0      //   (Green) 
 #define TFT_CS      PA1      //   (Orange) 
@@ -107,21 +117,26 @@ variants/generic_stm32f103c/board/board.h:#define BOARD_SPI2_SCK_PIN        PB13
 //
 
 #define TFT_LED        PA3     // Backlight 
-#define TEST_WAVE_PIN       PB1     //PB1 PWM 500 Hz 
 
 // Create the lcd object
 Adafruit_ILI9341_STM TFT = Adafruit_ILI9341_STM(TFT_CS, TFT_DC, TFT_RST); // Using hardware SPI
+
+#endif
+
+#define TEST_WAVE_PIN       PB1     //PB1 PWM 500 Hz 
 
 // LED - blinks on trigger events - leave this undefined if your board has no controllable LED
 // define as PC13 on the "Red/Blue Pill" boards and PD2 on the "Yellow Pill R"
 #define BOARD_LED PC13 //PB0
 
+#if defined(USE_ILI9341)
 // Display colours
 #define BEAM1_COLOUR ILI9341_GREEN
 #define BEAM2_COLOUR ILI9341_RED
 #define GRATICULE_COLOUR 0x07FF
 #define BEAM_OFF_COLOUR ILI9341_BLACK
 #define CURSOR_COLOUR ILI9341_GREEN
+#endif
 
 // Analog input
 #define ANALOG_MAX_VALUE 4096
@@ -175,7 +190,7 @@ boolean serialOutput = false;
 SerialCommand sCmd;
 
 // Create USB serial port
-USBSerial serial_debug;
+#define serial_debug Serial
 
 // Samples - depends on available RAM 6K is about the limit on an STM32F103C8T6
 // Bear in mind that the ILI9341 display is only able to display 240x320 pixels, at any time but we can output far more to the serial port, we effectively only show a window on our samples on the TFT.
@@ -202,17 +217,19 @@ void setup()
 {
 
   // BOARD_LED blinks on triggering assuming you have an LED on your board. If not simply dont't define it at the start of the sketch.
-#if defined BOARD_LED
+#if defined(BOARD_LED)
   pinMode(BOARD_LED, OUTPUT);
   digitalWrite(BOARD_LED, HIGH);
   delay(1000);
   digitalWrite(BOARD_LED, LOW);
   delay(1000);
 #endif
+#if defined(USE_ILI9341)
   pinMode(TFT_LED, OUTPUT);
   digitalWrite(TFT_LED, HIGH);
+#endif
 
-  serial_debug.begin();
+  serial_debug.begin(115200);
   adc_calibrate(ADC1);
   adc_calibrate(ADC2);
   setADCs (); //Setup ADC peripherals for interleaved continuous mode.
@@ -220,11 +237,13 @@ void setup()
   //
   // Serial command setup
   // Setup callbacks for SerialCommand commands
+#if defined(USE_TIME_H)
   sCmd.addCommand("timestamp",   setCurrentTime);          // Set the current time based on a unix timestamp
   sCmd.addCommand("date",        serialCurrentTime);       // Show the current time from the RTC
+#endif
   sCmd.addCommand("sleep",       sleepMode);               // Experimental - puts system to sleep
 
-#if defined TOUCH_SCREEN_AVAILABLE
+#if defined(TOUCH_SCREEN_AVAILABLE)
   sCmd.addCommand("touchcalibrate", touchCalibrate);       // Calibrate Touch Panel
 #endif
 
@@ -256,7 +275,7 @@ void setup()
 
   // Setup Touch Screen
   // http://www.rinkydinkelectronics.com/library.php?id=56
-#if defined TOUCH_SCREEN_AVAILABLE
+#if defined(TOUCH_SCREEN_AVAILABLE)
   myTouch.InitTouch();
   myTouch.setPrecision(PREC_EXTREME);
 #endif
@@ -270,6 +289,7 @@ void setup()
   timer_set_period(Timer3, 1000);
   toggleTestPulseOn();
 
+#if defined(USE_ILI9341)
   // Set up our sensor pin(s)
   pinMode(analogInPin, INPUT_ANALOG);
 
@@ -280,7 +300,7 @@ void setup()
   myHeight   = TFT.width() ;
   myWidth  = TFT.height();
   TFT.setTextColor(CURSOR_COLOUR, BEAM_OFF_COLOUR) ;
-#if defined TOUCH_SCREEN_AVAILABLE
+#if defined(TOUCH_SCREEN_AVAILABLE)
   touchCalibrate();
 #endif
 
@@ -293,12 +313,13 @@ void setup()
   notTriggered = true;
   showGraticule();
   showLabels();
+#endif
 }
 
 void loop()
 {
 
-#if defined TOUCH_SCREEN_AVAILABLE
+#if defined(TOUCH_SCREEN_AVAILABLE)
   readTouch();
 #endif
 
@@ -314,6 +335,7 @@ void loop()
       // Take our samples
       takeSamples();
       
+#if defined(USE_ILI9341)
       //Blank  out previous plot
       TFTSamplesClear(BEAM_OFF_COLOUR);
 
@@ -322,17 +344,24 @@ void loop()
 
       //Display the samples
       TFTSamples(BEAM1_COLOUR);
+#endif
       displayTime = (micros() - displayTime);
       
+#if defined(USE_ILI9341)
       // Display the Labels ( uS/Div, Volts/Div etc).
       showLabels();
+#endif
       displayTime = micros();
 
     }else {
-          showGraticule();
+#if defined(USE_ILI9341)
+      showGraticule();
+#endif
     }
     // Display the RTC time.
+#if defined(USE_ILI9341) && defined(USE_RTC)
     showTime();
+#endif
   }
   // Wait before allowing a re-trigger
   delay(retriggerDelay);
@@ -340,6 +369,7 @@ void loop()
   // sweepDelayFactor ++;
 }
 
+#if defined(USE_ILI9341)
 void showGraticule()
 {
   TFT.drawRect(0, 0, myHeight, myWidth, GRATICULE_COLOUR);
@@ -376,6 +406,7 @@ void showGraticule()
     }
   }
 }
+#endif
 
 void setADCs ()
 {
@@ -461,14 +492,16 @@ void incEdgeType() {
   */
 }
 
+#if defined(USE_ILI9341)
 void clearTFT()
 {
   TFT.fillScreen(BEAM_OFF_COLOUR);                // Blank the display
 }
+#endif
 
 void blinkLED()
 {
-#if defined BOARD_LED
+#if defined(BOARD_LED)
   digitalWrite(BOARD_LED, LOW);
   delay(10);
   digitalWrite(BOARD_LED, HIGH);
@@ -509,6 +542,7 @@ void takeSamples ()
 
 }
 
+#if defined(USE_ILI9341)
 void TFTSamplesClear (uint16_t beamColour)
 {
   for (signalX=1 ; signalX < myWidth - 2; signalX++)
@@ -517,7 +551,6 @@ void TFTSamplesClear (uint16_t beamColour)
     TFT.drawLine (  dataPlot[signalX-1], signalX, dataPlot[signalX] , signalX + 1, beamColour) ;
   }
 }
-
 
 void TFTSamples (uint16_t beamColour)
 {
@@ -580,6 +613,7 @@ void showLabels()
   TFT.setRotation(PORTRAIT);
 }
 
+#if defined(USE_RTC) && defined(USE_TIME_H)
 void showTime ()
 {
   // Show RTC Time.
@@ -609,12 +643,14 @@ void showTime ()
     TFT.print(month(tt));
     TFT.print("-");
     TFT.print(year(tt));
-    TFT.print(" "TZ" ");
+    TFT.print(" TZ ");
     // TFT.print(tt);
 
   }
   TFT.setRotation(PORTRAIT);
 }
+#endif
+#endif
 
 void serialSamples ()
 {
@@ -670,60 +706,69 @@ void unrecognized(const char *command) {
 }
 
 void decreaseTimebase() {
-  clearTrace();
-  /*
-  sweepDelayFactor =  sweepDelayFactor / 2 ;
-  if (sweepDelayFactor < 1 ) {
-
-    serial_debug.print("Timebase=");
-    sweepDelayFactor = 1;
-  }
-  */
   if (timeBase > 100)
   {
+#if defined(USE_ILI9341)
+  clearTrace();
+#endif
     timeBase -= 100;
-  }
+#if defined(USE_ILI9341)
   showTrace();
+#endif
+  }
   serial_debug.print("# Timebase=");
   serial_debug.println(timeBase);
 
 }
 
 void increaseTimebase() {
-  clearTrace();
-  serial_debug.print("# Timebase=");
   if (timeBase < 10000)
   {
+#if defined(USE_ILI9341)
+  clearTrace();
+#endif
     timeBase += 100;
+#if defined(USE_ILI9341)
+  showTrace();
+#endif
   }
   //sweepDelayFactor = 2 * sweepDelayFactor ;
-  showTrace();
   serial_debug.print("# Timebase=");
   serial_debug.println(timeBase);
 }
 
 void increaseZoomFactor() {
-  clearTrace();
-  if ( xZoomFactor < 21) {
+  if ( xZoomFactor < 21) 
+  {
+#if defined(USE_ILI9341)
+    clearTrace();
+#endif
     xZoomFactor += 1;
+#if defined(USE_ILI9341)
+    showTrace();
+#endif
   }
-  showTrace();
   serial_debug.print("# Zoom=");
   serial_debug.println(xZoomFactor);
 
 }
 
 void decreaseZoomFactor() {
-  clearTrace();
   if (xZoomFactor > 1) {
+#if defined(USE_ILI9341)
+    clearTrace();
+#endif
     xZoomFactor -= 1;
+#if defined(USE_ILI9341)
+    showTrace();
+#endif
   }
-  showTrace();
-  Serial.print("# Zoom=");
-  Serial.println(xZoomFactor);
+  serial_debug.print("# Zoom=");
+  serial_debug.println(xZoomFactor);
   //clearTFT();
 }
 
+#if defined(USE_ILI9341)
 void clearTrace() {
   TFTSamples(BEAM_OFF_COLOUR);
   showGraticule();
@@ -733,50 +778,66 @@ void showTrace() {
   showLabels();
   TFTSamples(BEAM1_COLOUR);
 }
+#endif
 
 void scrollRight() {
-  clearTrace();
   if (startSample < (endSample - 120)) {
+#if defined(USE_ILI9341)
+    clearTrace();
+#endif
     startSample += 100;
+#if defined(USE_ILI9341)
+    showTrace();
+#endif
   }
-  showTrace();
-  Serial.print("# startSample=");
-  Serial.println(startSample);
+  serial_debug.print("# startSample=");
+  serial_debug.println(startSample);
 
 
 }
 
 void scrollLeft() {
-  clearTrace();
   if (startSample > (120)) {
+#if defined(USE_ILI9341)
+    clearTrace();
+#endif
     startSample -= 100;
+#if defined(USE_ILI9341)
     showTrace();
+#endif
   }
-  Serial.print("# startSample=");
-  Serial.println(startSample);
+  serial_debug.print("# startSample=");
+  serial_debug.println(startSample);
 
 }
 
 void increaseYposition() {
-
   if (yPosition < myHeight ) {
+#if defined(USE_ILI9341)
     clearTrace();
+#endif
     yPosition ++;
+#if defined(USE_ILI9341)
     showTrace();
+#endif
   }
-  Serial.print("# yPosition=");
-  Serial.println(yPosition);
+  serial_debug.print("# yPosition=");
+  serial_debug.println(yPosition);
 }
 
 void decreaseYposition() {
 
   if (yPosition > -myHeight ) {
+#if defined(USE_ILI9341)
     clearTrace();
+#endif
     yPosition --;
+#if defined(USE_ILI9341)
     showTrace();
+#endif
   }
-  Serial.print("# yPosition=");
-  Serial.println(yPosition);
+  serial_debug.print("# yPosition=");
+  serial_debug.println(yPosition);
 }
 
 
@@ -785,8 +846,8 @@ void increaseTriggerPosition() {
   if (triggerValue < ANALOG_MAX_VALUE ) {
     triggerValue += TRIGGER_POSITION_STEP;  //trigger position step
   }
-  Serial.print("# TriggerPosition=");
-  Serial.println(triggerValue);
+  serial_debug.print("# TriggerPosition=");
+  serial_debug.println(triggerValue);
 }
 
 void decreaseTriggerPosition() {
@@ -794,8 +855,8 @@ void decreaseTriggerPosition() {
   if (triggerValue > 0 ) {
     triggerValue -= TRIGGER_POSITION_STEP;  //trigger position step
   }
-  Serial.print("# TriggerPosition=");
-  Serial.println(triggerValue);
+  serial_debug.print("# TriggerPosition=");
+  serial_debug.println(triggerValue);
 }
 
 void atAt() {
@@ -851,6 +912,7 @@ static void DMA1_CH1_Event() {
   dma1_ch1_Active = 0;
 }
 
+#if defined(USE_TIME_H)
 void setCurrentTime() {
   char *arg;
   arg = sCmd.next();
@@ -859,8 +921,10 @@ void setCurrentTime() {
   serial_debug.print(thisArg.toInt() );
   serial_debug.println("]");
   setTime(thisArg.toInt());
+#if defined(USE_RTC)
   time_t tt = now();
   rt.setTime(tt);
+#endif
   serialCurrentTime();
 }
 
@@ -886,11 +950,12 @@ void serialCurrentTime() {
   serial_debug.print(month(tt));
   serial_debug.print("/");
   serial_debug.print(year(tt));
-  serial_debug.println("("TZ")");
+  serial_debug.println("(TZ)");
 
 }
+#endif
 
-#if defined TOUCH_SCREEN_AVAILABLE
+#if defined(TOUCH_SCREEN_AVAILABLE)
 void touchCalibrate() {
   // showGraticule();
   for (uint8_t screenLayout = 0 ; screenLayout < 4 ; screenLayout += 1)
@@ -990,6 +1055,7 @@ void readTouch() {
 
 #endif
 
+#if defined(USE_ILI9341)
 void showCredits() {
   TFT.setTextSize(2);                           // Small 26 char / line
   //TFT.setTextColor(CURSOR_COLOUR, BEAM_OFF_COLOUR) ;
@@ -1015,6 +1081,15 @@ void showCredits() {
   TFT.setTextSize(2);
   TFT.setRotation(PORTRAIT);
 }
+#endif
+
+/* NOT USED
+
+// Define the Base address of the RTC  registers (battery backed up CMOS Ram), so we can use them for config of touch screen and other calibration.
+// See http://stm32duino.com/viewtopic.php?f=15&t=132&hilit=rtc&start=40 for a more details about the RTC NVRam
+// 10x 16 bit registers are available on the STM32F103CXXX more on the higher density device.
+
+#define BKP_REG_BASE   (uint32_t *)(0x40006C00 +0x04)
 
 static inline int readBKP(int registerNumber)
 {
@@ -1034,6 +1109,7 @@ static inline void writeBKP(int registerNumber, int value)
 
   *(BKP_REG_BASE + registerNumber) = value & 0xffff;
 }
+*/
 
 void sleepMode()
 {
