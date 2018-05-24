@@ -143,11 +143,14 @@ int16_t myHeight ;
 #define TEST_WAVE_PIN       PB1       //PB1 PWM 500 Hz 
 // Analog input
 #define ANALOG_MAX_VALUE    4096
+
 #define ANALOG_IN_PIN1      PB0
 #define ANALOG_IN_PIN2      PA7
-// Analog input pin: any of LQFP44 pins (PORT_PIN), 10 (PA0), 11 (PA1), 12 (PA2), 13 (PA3), 14 (PA4), 15 (PA5), 16 (PA6), 17 (PA7), 18 (PB0), 19  (PB1)
-#define MAX_SAMPLES         1024*20   //1024*6
-// Samples - depends on available RAM 6K is about the limit on an STM32F103C8T6
+// refer to array boardADCPins[] in variants/<board>/board.cpp for available analog input pins
+
+#define MAX_SAMPLES         1024*24   // MAX_SAMPLES depends on available RAM - each sample takes 2 bytes
+// 1024*6  =  6144 samples = 12KB is about the limit on an STM32F103C8T6 (20KB ram available)
+// 1024*24 = 24576 samples = 48KB is about the limit on an STM32F103ZET6 (64KB ram available)
 // Bear in mind that the ILI9341 display is only able to display 240x320 pixels, at any time but we can output far more to the serial port, we effectively only show a window on our samples on the TFT.
 
 
@@ -161,15 +164,12 @@ int16_t xZoomFactor = 1;
 int16_t yZoomFactor = 100; //Adjusted to get 3.3V wave to fit on screen
 int16_t yPosition = 0 ;
 
-// Startup with sweep hold off or on
-boolean triggerHeld = 0 ;
-
 
 unsigned long sweepDelayFactor = 1;
 unsigned long timeBase = 200;  //Timebase in microseconds
 
 //Trigger stuff
-boolean notTriggered ;
+boolean triggered ;
 
 // Sensitivity is the necessary change in AD value which will cause the scope to trigger.
 // If VAD=3.3 volts, then 1 unit of sensitivity is around 0.8mV but this assumes no external attenuator. Calibration is needed to match this with the magnitude of the input signal.
@@ -186,9 +186,6 @@ int8_t triggerType = 2; //0-both 1-negative 2-positive
 uint16_t triggerPoints[2];
 
 
-// Serial output of samples - off by default. Toggled from UI/Serial commands.
-boolean serialOutput = false;
-
 // Create Serial Command Object.
 SerialCommand sCmd;
 
@@ -199,7 +196,6 @@ uint32_t startSample = 0; //10
 uint32_t endSample = MAX_SAMPLES ;
 
 // Array for the ADC data
-//uint16_t dataPoints[MAX_SAMPLES];
 uint32_t dataPoints32[MAX_SAMPLES / 2];
 uint16_t *dataPoints = (uint16_t *)&dataPoints32;
 
@@ -216,8 +212,8 @@ volatile static bool dma1_ch1_Active;
 void setup()
 {
 
-  // BOARD_LED blinks on triggering assuming you have an LED on your board. If not simply dont't define it at the start of the sketch.
 #if defined(BOARD_LED)
+  // BOARD_LED blinks on triggering assuming you have an LED on your board. If not simply dont't define it at the start of the sketch.
   pinMode(BOARD_LED, OUTPUT);
   digitalWrite(BOARD_LED, HIGH);
   delay(1000);
@@ -230,8 +226,6 @@ void setup()
 #endif
 
   serial_debug.begin(115200);
-  adc_calibrate(ADC1);
-  adc_calibrate(ADC2);
   setADCs (); //Setup ADC peripherals for interleaved continuous mode.
 
   //
@@ -241,25 +235,32 @@ void setup()
   sCmd.addCommand("timestamp",   setCurrentTime);          // Set the current time based on a unix timestamp
   sCmd.addCommand("date",        serialCurrentTime);       // Show the current time from the RTC
 #endif
-  sCmd.addCommand("sleep",       sleepMode);               // Experimental - puts system to sleep
+  sCmd.addCommand("sleep",       goToSleep);               // Experimental - puts system to sleep
 
 #if defined(TOUCH_SCREEN_AVAILABLE)
   sCmd.addCommand("touchcalibrate", touchCalibrate);       // Calibrate Touch Panel
 #endif
 
-  sCmd.addCommand("s",   toggleSerial);                    // Turns serial sample output on/off
-  sCmd.addCommand("h",   toggleHold);                      // Turns triggering on/off
+  sCmd.addCommand("m",   manualSamples);                   // Manual samples
+  sCmd.addCommand("a",   trigger);                         // Trgger based samples
+  sCmd.addCommand("e",   toggleEdgeType);                     // change trigger type: 0 - triggerBoth ; 1 - triggerNegative ; 2 - triggerPositive
+  sCmd.addCommand("d",   dumpSamples);                     // Print samples to serial
+  
   sCmd.addCommand("t",   decreaseTimebase);                // decrease Timebase by 10x
   sCmd.addCommand("T",   increaseTimebase);                // increase Timebase by 10x
+  
   sCmd.addCommand("z",   decreaseZoomFactor);              // decrease Zoom
   sCmd.addCommand("Z",   increaseZoomFactor);              // increase Zoom
+  
   sCmd.addCommand("r",   scrollRight);                     // start onscreen trace further right
   sCmd.addCommand("l",   scrollLeft);                      // start onscreen trae further left
-  sCmd.addCommand("e",   incEdgeType);                     // increment the trigger edge type 0 1 2 0 1 2 etc
+  
   sCmd.addCommand("y",   decreaseYposition);               // move trace Down
   sCmd.addCommand("Y",   increaseYposition);               // move trace Up
+  
   sCmd.addCommand("g",   decreaseTriggerPosition);         // move trigger position Down
   sCmd.addCommand("G",   increaseTriggerPosition);         // move trigger position Up
+  
   sCmd.addCommand("P",   toggleTestPulseOn);               // Toggle the test pulse pin from high impedence input to square wave output.
   sCmd.addCommand("p",   toggleTestPulseOff);              // Toggle the Test pin from square wave test to high impedence input.
 
@@ -312,7 +313,7 @@ void setup()
   showCredits(); // Honourable mentions ;¬)
   delay(1000) ; //5000
   clearTFT();
-  notTriggered = true;
+  triggered = false;
   showGraticule();
   showLabels();
 #endif
@@ -326,18 +327,16 @@ void loop()
 #endif
 
   sCmd.readSerial();     // Process serial commands
-  if ( !triggerHeld  )
-  {
-    // Wait for trigger
-    trigger();
-    if ( !notTriggered )
+  
+#if defined(USE_ILI9341)
+
+    if ( triggered )
     {
       blinkLED();
 
       // Take our samples
-      takeSamples();
+      //takeSamples();
       
-#if defined(USE_ILI9341)
       //Blank  out previous plot
       TFTSamplesClear(BEAM_OFF_COLOUR);
 
@@ -346,25 +345,21 @@ void loop()
 
       //Display the samples
       TFTSamples(BEAM1_COLOUR);
-#endif
+
       displayTime = (micros() - displayTime);
       
-#if defined(USE_ILI9341)
       // Display the Labels ( uS/Div, Volts/Div etc).
       showLabels();
-#endif
+	  
       displayTime = micros();
 
     }else {
-#if defined(USE_ILI9341)
       showGraticule();
-#endif
     }
     // Display the RTC time.
-#if defined(USE_ILI9341) && defined(USE_RTC)
     showTime();
 #endif
-  }
+
   // Wait before allowing a re-trigger
   delay(retriggerDelay);
   // DEBUG: increment the sweepDelayFactor slowly to show the effect.
@@ -389,6 +384,10 @@ void setADCs ()
   ADC2->regs->CR2 |= ADC_CR2_CONT; // ADC 2 continuos
   ADC2->regs->CR2 |= ADC_CR2_SWSTART;
   ADC2->regs->SQR3 = pinMapADCin2;
+  
+  adc_calibrate(ADC1);
+  adc_calibrate(ADC2);
+
 }
 
 // Grab the samples from the ADC
@@ -413,21 +412,27 @@ void takeSamples ()
   dma1_ch1_Active = 1;
   //  regs->CR2 |= ADC_CR2_SWSTART; //moved to setADC
   dma_enable(DMA1, DMA_CH1); // Enable the channel and start the transfer.
-  //adc_calibrate(ADC1);
-  //adc_calibrate(ADC2);
+  
   samplingTime = micros();
   while (dma1_ch1_Active);
   samplingTime = (micros() - samplingTime);
 
   dma_disable(DMA1, DMA_CH1); //End of trasfer, disable DMA and Continuous mode.
   // regs->CR2 &= ~ADC_CR2_CONT;
+  
+}
 
+void manualSamples()
+{
+  takeSamples();
+  serial_debug.println("Samples taken!");
+  serial_debug.println();
 }
 
 // Crude triggering on positive or negative or either change from previous to current sample.
 void trigger()
 {
-  notTriggered = true;
+  triggered = false;
   switch (triggerType) {
     case 1:
       triggerNegative() ;
@@ -439,16 +444,16 @@ void trigger()
       triggerBoth() ;
       break;
   }
+  blinkLED();
+  takeSamples();
 }
 
-void triggerBoth()
-{
+void triggerNegative() {
   triggerPoints[0] = analogRead(ANALOG_IN_PIN1);
-  while(notTriggered){
+  while(!triggered){
     triggerPoints[1] = analogRead(ANALOG_IN_PIN1);
-    if ( ((triggerPoints[1] < triggerValue) && (triggerPoints[0] > triggerValue)) ||
-         ((triggerPoints[1] > triggerValue) && (triggerPoints[0] < triggerValue)) ){
-      notTriggered = false;
+    if ((triggerPoints[1] < triggerValue) && (triggerPoints[0] > triggerValue) ){
+      triggered = true;
     }
     triggerPoints[0] = triggerPoints[1]; //analogRead(ANALOG_IN_PIN1);
   }
@@ -456,37 +461,35 @@ void triggerBoth()
 
 void triggerPositive() {
   triggerPoints[0] = analogRead(ANALOG_IN_PIN1);
-  while(notTriggered){
+  while(!triggered){
     triggerPoints[1] = analogRead(ANALOG_IN_PIN1);
     if ((triggerPoints[1] > triggerValue) && (triggerPoints[0] < triggerValue) ){
-      notTriggered = false;
+      triggered = true;
     }
     triggerPoints[0] = triggerPoints[1]; //analogRead(ANALOG_IN_PIN1);
   }
 }
 
-void triggerNegative() {
+void triggerBoth()
+{
   triggerPoints[0] = analogRead(ANALOG_IN_PIN1);
-  while(notTriggered){
+  while(!triggered){
     triggerPoints[1] = analogRead(ANALOG_IN_PIN1);
-    if ((triggerPoints[1] < triggerValue) && (triggerPoints[0] > triggerValue) ){
-      notTriggered = false;
+    if ( ((triggerPoints[1] < triggerValue) && (triggerPoints[0] > triggerValue)) ||
+         ((triggerPoints[1] > triggerValue) && (triggerPoints[0] < triggerValue)) ){
+      triggered = true;
     }
     triggerPoints[0] = triggerPoints[1]; //analogRead(ANALOG_IN_PIN1);
   }
 }
 
-void incEdgeType() {
+void toggleEdgeType() {
   triggerType += 1;
   if (triggerType > 2)
   {
     triggerType = 0;
   }
-  /*
-  serial_debug.println(triggerPoints[0]);
-  serial_debug.println(triggerPoints[1]);
-  serial_debug.println(triggerType);
-  */
+  serial_debug.print("triggerType: ");serial_debug.println(triggerType);
 }
 
 void blinkLED()
@@ -498,51 +501,25 @@ void blinkLED()
 #endif
 }
 
-void serialSamples ()
+void dumpSamples ()
 {
   // Send *all* of the samples to the serial port.
   serial_debug.println("#Time(uS), ADC Number, value, diff");
-  for (int16_t j = 1; j < MAX_SAMPLES   ; j++ )
+  for (int16_t j = 0; j < MAX_SAMPLES   ; j+=2 )
   {
     // Time from trigger in milliseconds
-    serial_debug.print((samplingTime / (MAX_SAMPLES))*j);
-    serial_debug.print(" ");
-    // raw ADC data
-    serial_debug.print(j % 2 + 1);
-    serial_debug.print(" ");
-    serial_debug.print(dataPoints[j] );
-    serial_debug.print(" ");
-    serial_debug.print(dataPoints[j] - dataPoints[j - 1]);
-    serial_debug.print(" ");
-    serial_debug.print(dataPoints[j] - ((dataPoints[j] - dataPoints[j - 1]) / 2));
-    serial_debug.print("\n");
-
-    // delay(100);
-
+    serial_debug.print(dataPoints[j]);
+    serial_debug.print(";");
+    serial_debug.println(dataPoints[j+1]);
 
   }
   serial_debug.print("\n");
 }
 
-void toggleHold()
+void dumpOptions()
 {
-  triggerHeld ^= 1 ;
-  //serial_debug.print("# ");
-  //serial_debug.print(triggerHeld);
-  if (triggerHeld)
-  {
-    serial_debug.println("# Toggle Hold on");
-  }
-  else
-  {
-    serial_debug.println("# Toggle Hold off");
-  }
-}
-
-void toggleSerial() {
-  serialOutput = !serialOutput ;
-  serial_debug.println("# Toggle Serial");
-  serialSamples();
+	serial_debug.print("triggerType: ");serial_debug.println(triggerType);
+	serial_debug.println();
 }
 
 void unrecognized(const char *command) {
@@ -786,7 +763,7 @@ void serialCurrentTime() {
 }
 #endif
 
-void sleepMode()
+void goToSleep()
 {
   serial_debug.println("# Nighty night!");
   // Set PDDS and LPDS bits for standby mode, and set Clear WUF flag (required per datasheet):
@@ -1117,4 +1094,5 @@ static inline void writeBKP(int registerNumber, int value)
   *(BKP_REG_BASE + registerNumber) = value & 0xffff;
 }
 */
+
 
