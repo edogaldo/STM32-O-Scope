@@ -100,13 +100,6 @@ variants/generic_stm32f103c/board/board.h:#define BOARD_SPI2_MOSI_PIN       PB15
 variants/generic_stm32f103c/board/board.h:#define BOARD_SPI2_MISO_PIN       PB14
 variants/generic_stm32f103c/board/board.h:#define BOARD_SPI2_SCK_PIN        PB13
 
-*/
-
-#if defined(USE_ILI9341)
-// Additional  display specific signals (i.e. non SPI) for STM32F103C8T6 (Wire colour)
-#define TFT_DC      PA0      //   (Green) 
-#define TFT_CS      PA1      //   (Orange) 
-#define TFT_RST     PA2      //   (Yellow)
 
 // Hardware SPI1 on the STM32F103C8T6 *ALSO* needs to be connected and pins are as follows.
 //
@@ -116,39 +109,53 @@ variants/generic_stm32f103c/board/board.h:#define BOARD_SPI2_SCK_PIN        PB13
 // SPI1_MOSI (PA7) (LQFP48 pin 17)    (Grey)
 //
 
-#define TFT_LED        PA3     // Backlight 
+*/
+
+#if defined(USE_ILI9341)
+// Additional  display specific signals (i.e. non SPI) for STM32F103C8T6 (Wire colour)
+#define TFT_DC      PA0      //   (Green) 
+#define TFT_CS      PA1      //   (Orange) 
+#define TFT_RST     PA2      //   (Yellow)
+#define TFT_LED     PA3      // Backlight 
+// Display colours
+#define BEAM1_COLOUR       ILI9341_GREEN
+#define BEAM2_COLOUR       ILI9341_RED
+#define GRATICULE_COLOUR   0x07FF
+#define BEAM_OFF_COLOUR    ILI9341_BLACK
+#define CURSOR_COLOUR      ILI9341_GREEN
 
 // Create the lcd object
 Adafruit_ILI9341_STM TFT = Adafruit_ILI9341_STM(TFT_CS, TFT_DC, TFT_RST); // Using hardware SPI
-
-#endif
-
-#define TEST_WAVE_PIN       PB1     //PB1 PWM 500 Hz 
-
-// LED - blinks on trigger events - leave this undefined if your board has no controllable LED
-// define as PC13 on the "Red/Blue Pill" boards and PD2 on the "Yellow Pill R"
-#define BOARD_LED PC13 //PB0
-
-#if defined(USE_ILI9341)
-// Display colours
-#define BEAM1_COLOUR ILI9341_GREEN
-#define BEAM2_COLOUR ILI9341_RED
-#define GRATICULE_COLOUR 0x07FF
-#define BEAM_OFF_COLOUR ILI9341_BLACK
-#define CURSOR_COLOUR ILI9341_GREEN
-#endif
-
-// Analog input
-#define ANALOG_MAX_VALUE 4096
-const int8_t analogInPin = PB0;   // Analog input pin: any of LQFP44 pins (PORT_PIN), 10 (PA0), 11 (PA1), 12 (PA2), 13 (PA3), 14 (PA4), 15 (PA5), 16 (PA6), 17 (PA7), 18 (PB0), 19  (PB1)
-float samplingTime = 0;
-float displayTime = 0;
-
 
 // Variables for the beam position
 uint16_t signalX ;
 uint16_t signalY ;
 uint16_t signalY1;
+// Screen dimensions
+int16_t myWidth ;
+int16_t myHeight ;
+
+#endif
+
+#define BOARD_LED           PC13      //PB0
+// LED - blinks on trigger events - leave this undefined if your board has no controllable LED
+// define as PC13 on the "Red/Blue Pill" boards and PD2 on the "Yellow Pill R"
+#define TEST_WAVE_PIN       PB1       //PB1 PWM 500 Hz 
+// Analog input
+#define ANALOG_MAX_VALUE    4096
+#define ANALOG_IN_PIN1      PB0
+#define ANALOG_IN_PIN2      PA7
+// Analog input pin: any of LQFP44 pins (PORT_PIN), 10 (PA0), 11 (PA1), 12 (PA2), 13 (PA3), 14 (PA4), 15 (PA5), 16 (PA6), 17 (PA7), 18 (PB0), 19  (PB1)
+#define MAX_SAMPLES         1024*20   //1024*6
+// Samples - depends on available RAM 6K is about the limit on an STM32F103C8T6
+// Bear in mind that the ILI9341 display is only able to display 240x320 pixels, at any time but we can output far more to the serial port, we effectively only show a window on our samples on the TFT.
+
+
+float samplingTime = 0;
+float displayTime = 0;
+
+
+// Variables for the beam position
 int16_t xZoomFactor = 1;
 // yZoomFactor (percentage)
 int16_t yZoomFactor = 100; //Adjusted to get 3.3V wave to fit on screen
@@ -160,10 +167,6 @@ boolean triggerHeld = 0 ;
 
 unsigned long sweepDelayFactor = 1;
 unsigned long timeBase = 200;  //Timebase in microseconds
-
-// Screen dimensions
-int16_t myWidth ;
-int16_t myHeight ;
 
 //Trigger stuff
 boolean notTriggered ;
@@ -192,15 +195,12 @@ SerialCommand sCmd;
 // Create USB serial port
 #define serial_debug Serial
 
-// Samples - depends on available RAM 6K is about the limit on an STM32F103C8T6
-// Bear in mind that the ILI9341 display is only able to display 240x320 pixels, at any time but we can output far more to the serial port, we effectively only show a window on our samples on the TFT.
-# define maxSamples 1024*20 //1024*6
 uint32_t startSample = 0; //10
-uint32_t endSample = maxSamples ;
+uint32_t endSample = MAX_SAMPLES ;
 
 // Array for the ADC data
-//uint16_t dataPoints[maxSamples];
-uint32_t dataPoints32[maxSamples / 2];
+//uint16_t dataPoints[MAX_SAMPLES];
+uint32_t dataPoints32[MAX_SAMPLES / 2];
 uint16_t *dataPoints = (uint16_t *)&dataPoints32;
 
 //array for computed data (speedup)
@@ -289,9 +289,11 @@ void setup()
   timer_set_period(Timer3, 1000);
   toggleTestPulseOn();
 
-#if defined(USE_ILI9341)
   // Set up our sensor pin(s)
-  pinMode(analogInPin, INPUT_ANALOG);
+  pinMode(ANALOG_IN_PIN1, INPUT_ANALOG);
+  pinMode(ANALOG_IN_PIN2, INPUT_ANALOG);
+  
+#if defined(USE_ILI9341)
 
   TFT.begin();
   // initialize the display
@@ -369,50 +371,11 @@ void loop()
   // sweepDelayFactor ++;
 }
 
-#if defined(USE_ILI9341)
-void showGraticule()
-{
-  TFT.drawRect(0, 0, myHeight, myWidth, GRATICULE_COLOUR);
-  // Dot grid - ten distinct divisions (9 dots) in both X and Y axis.
-  for (uint16_t TicksX = 1; TicksX < 10; TicksX++)
-  {
-    for (uint16_t TicksY = 1; TicksY < 10; TicksY++)
-    {
-      TFT.drawPixel(  TicksX * (myHeight / 10), TicksY * (myWidth / 10), GRATICULE_COLOUR);
-    }
-  }
-  // Horizontal and Vertical centre lines 5 ticks per grid square with a longer tick in line with our dots
-  for (uint16_t TicksX = 0; TicksX < myWidth; TicksX += (myHeight / 50))
-  {
-    if (TicksX % (myWidth / 10) > 0 )
-    {
-      TFT.drawFastHLine(  (myHeight / 2) - 1 , TicksX, 3, GRATICULE_COLOUR);
-    }
-    else
-    {
-      TFT.drawFastHLine(  (myHeight / 2) - 3 , TicksX, 7, GRATICULE_COLOUR);
-    }
-
-  }
-  for (uint16_t TicksY = 0; TicksY < myHeight; TicksY += (myHeight / 50) )
-  {
-    if (TicksY % (myHeight / 10) > 0 )
-    {
-      TFT.drawFastVLine( TicksY,  (myWidth / 2) - 1 , 3, GRATICULE_COLOUR);
-    }
-    else
-    {
-      TFT.drawFastVLine( TicksY,  (myWidth / 2) - 3 , 7, GRATICULE_COLOUR);
-    }
-  }
-}
-#endif
-
 void setADCs ()
 {
-  adc_set_prescaler(ADC_PRE_PCLK2_DIV_6); // Overclock ADC to 18MHz if sysclock is 72MHz
-  //  const adc_dev *dev = PIN_MAP[analogInPin].adc_device;
-  int pinMapADCin = PIN_MAP[analogInPin].adc_channel;
+  adc_set_prescaler(ADC_PRE_PCLK2_DIV_4); // ADC_PRE_PCLK2_DIV_4: Overclock ADC to 18MHz if sysclock is 72MHz
+  int pinMapADCin1 = PIN_MAP[ANALOG_IN_PIN1].adc_channel;
+  int pinMapADCin2 = PIN_MAP[ANALOG_IN_PIN2].adc_channel;
   adc_set_sample_rate(ADC1, ADC_SMPR_1_5);    //=0,58uS/sample.  ADC_SMPR_13_5 = 1.08uS - use this one if Rin>10Kohm,
   adc_set_sample_rate(ADC2, ADC_SMPR_1_5);    // if not may get some sporadic noise. see datasheet.
 
@@ -421,94 +384,11 @@ void setADCs ()
   ADC1->regs->CR1 |= ADC_CR1_FASTINT; // Interleaved mode
   ADC1->regs->CR2 |= ADC_CR2_CONT; // | ADC_CR2_DMA; // Set continuous mode and DMA (set in takeSamples())
   ADC1->regs->CR2 |= ADC_CR2_SWSTART;
-  ADC1->regs->SQR3 = pinMapADCin;
+  ADC1->regs->SQR3 = pinMapADCin1;
 
   ADC2->regs->CR2 |= ADC_CR2_CONT; // ADC 2 continuos
   ADC2->regs->CR2 |= ADC_CR2_SWSTART;
-  ADC2->regs->SQR3 = pinMapADCin;
-}
-
-
-// Crude triggering on positive or negative or either change from previous to current sample.
-void trigger()
-{
-  notTriggered = true;
-  switch (triggerType) {
-    case 1:
-      triggerNegative() ;
-      break;
-    case 2:
-      triggerPositive() ;
-      break;
-    default:
-      triggerBoth() ;
-      break;
-  }
-}
-
-void triggerBoth()
-{
-  triggerPoints[0] = analogRead(analogInPin);
-  while(notTriggered){
-    triggerPoints[1] = analogRead(analogInPin);
-    if ( ((triggerPoints[1] < triggerValue) && (triggerPoints[0] > triggerValue)) ||
-         ((triggerPoints[1] > triggerValue) && (triggerPoints[0] < triggerValue)) ){
-      notTriggered = false;
-    }
-    triggerPoints[0] = triggerPoints[1]; //analogRead(analogInPin);
-  }
-}
-
-void triggerPositive() {
-  triggerPoints[0] = analogRead(analogInPin);
-  while(notTriggered){
-    triggerPoints[1] = analogRead(analogInPin);
-    if ((triggerPoints[1] > triggerValue) && (triggerPoints[0] < triggerValue) ){
-      notTriggered = false;
-    }
-    triggerPoints[0] = triggerPoints[1]; //analogRead(analogInPin);
-  }
-}
-
-void triggerNegative() {
-  triggerPoints[0] = analogRead(analogInPin);
-  while(notTriggered){
-    triggerPoints[1] = analogRead(analogInPin);
-    if ((triggerPoints[1] < triggerValue) && (triggerPoints[0] > triggerValue) ){
-      notTriggered = false;
-    }
-    triggerPoints[0] = triggerPoints[1]; //analogRead(analogInPin);
-  }
-}
-
-void incEdgeType() {
-  triggerType += 1;
-  if (triggerType > 2)
-  {
-    triggerType = 0;
-  }
-  /*
-  serial_debug.println(triggerPoints[0]);
-  serial_debug.println(triggerPoints[1]);
-  serial_debug.println(triggerType);
-  */
-}
-
-#if defined(USE_ILI9341)
-void clearTFT()
-{
-  TFT.fillScreen(BEAM_OFF_COLOUR);                // Blank the display
-}
-#endif
-
-void blinkLED()
-{
-#if defined(BOARD_LED)
-  digitalWrite(BOARD_LED, LOW);
-  delay(10);
-  digitalWrite(BOARD_LED, HIGH);
-#endif
-
+  ADC2->regs->SQR3 = pinMapADCin2;
 }
 
 // Grab the samples from the ADC
@@ -529,7 +409,7 @@ void takeSamples ()
   adc_dma_enable(ADC1);
   dma_setup_transfer(DMA1, DMA_CH1, &ADC1->regs->DR, DMA_SIZE_32BITS,
                      dataPoints32, DMA_SIZE_32BITS, (DMA_MINC_MODE | DMA_TRNS_CMPLT));// Receive buffer DMA
-  dma_set_num_transfers(DMA1, DMA_CH1, maxSamples / 2);
+  dma_set_num_transfers(DMA1, DMA_CH1, MAX_SAMPLES / 2);
   dma1_ch1_Active = 1;
   //  regs->CR2 |= ADC_CR2_SWSTART; //moved to setADC
   dma_enable(DMA1, DMA_CH1); // Enable the channel and start the transfer.
@@ -544,124 +424,88 @@ void takeSamples ()
 
 }
 
-#if defined(USE_ILI9341)
-void TFTSamplesClear (uint16_t beamColour)
+// Crude triggering on positive or negative or either change from previous to current sample.
+void trigger()
 {
-  for (signalX=1 ; signalX < myWidth - 2; signalX++)
-  {
-    //use saved data to improve speed
-    TFT.drawLine (  dataPlot[signalX-1], signalX, dataPlot[signalX] , signalX + 1, beamColour) ;
+  notTriggered = true;
+  switch (triggerType) {
+    case 1:
+      triggerNegative() ;
+      break;
+    case 2:
+      triggerPositive() ;
+      break;
+    default:
+      triggerBoth() ;
+      break;
   }
 }
 
-void TFTSamples (uint16_t beamColour)
+void triggerBoth()
 {
-  //calculate first sample
-  signalY =  ((myHeight * dataPoints[0 * ((endSample - startSample) / (myWidth * timeBase / 100)) + 1]) / ANALOG_MAX_VALUE) * (yZoomFactor / 100) + yPosition;
-  dataPlot[0]=signalY * 99 / 100 + 1;
-  
-  for (signalX=1 ; signalX < myWidth - 2; signalX++)
-  {
-    // Scale our samples to fit our screen. Most scopes increase this in steps of 5,10,25,50,100 250,500,1000 etc
-    // Pick the nearest suitable samples for each of our myWidth screen resolution points
-    signalY1 = ((myHeight * dataPoints[(signalX + 1) * ((endSample - startSample) / (myWidth * timeBase / 100)) + 1]) / ANALOG_MAX_VALUE) * (yZoomFactor / 100) + yPosition ;
-    dataPlot[signalX] = signalY1 * 99 / 100 + 1;
-    TFT.drawLine (  dataPlot[signalX-1], signalX, dataPlot[signalX] , signalX + 1, beamColour) ;
-    signalY = signalY1;
-  }
-}
-
-/*
-// Run a bunch of NOOPs to trim the inter ADC conversion gap
-void sweepDelay(unsigned long sweepDelayFactor) {
-  volatile unsigned long i = 0;
-  for (i = 0; i < sweepDelayFactor; i++) {
-    __asm__ __volatile__ ("nop");
-  }
-}
-*/
-
-void showLabels()
-{
-  TFT.setRotation(LANDSCAPE);
-  TFT.setTextSize(1);
-  TFT.setCursor(10, 190);
-  // TFT.print("Y=");
-  //TFT.print((samplingTime * xZoomFactor) / maxSamples);
-  TFT.print(float (float(samplingTime) / float(maxSamples)));
-
-  TFT.setTextSize(1);
-  TFT.print(" uS/Sample  ");
-  TFT.print(maxSamples);
-  TFT.print(" samples ");
-//  TFT.setCursor(10, 190);
-//  TFT.print(displayTime);
-  TFT.print(float (1000000 / float(displayTime)));
-  TFT.print(" fps    ");
-  TFT.setTextSize(2);
-  TFT.setCursor(10, 210);
-  TFT.print("0.3");
-  TFT.setTextSize(1);
-  TFT.print(" V/Div ");
-  TFT.setTextSize(1);
-
-  TFT.print("timeBase=");
-  TFT.print(timeBase);
-  TFT.print(" yzoom=");
-  TFT.print(yZoomFactor);
-  TFT.print(" ypos=");
-  TFT.print(yPosition);
-  //showTime();
-  TFT.setRotation(PORTRAIT);
-}
-
-#if defined(USE_RTC) && defined(USE_TIME_H)
-void showTime ()
-{
-  // Show RTC Time.
-  TFT.setTextSize(1);
-  TFT.setRotation(LANDSCAPE);
-  if (rt.getTime() != tt)
-  {
-    tt = rt.getTime();
-    TFT.setCursor(5, 10);
-    if (hour(tt) < 10) {
-      TFT.print("0");
+  triggerPoints[0] = analogRead(ANALOG_IN_PIN1);
+  while(notTriggered){
+    triggerPoints[1] = analogRead(ANALOG_IN_PIN1);
+    if ( ((triggerPoints[1] < triggerValue) && (triggerPoints[0] > triggerValue)) ||
+         ((triggerPoints[1] > triggerValue) && (triggerPoints[0] < triggerValue)) ){
+      notTriggered = false;
     }
-    TFT.print(hour(tt));
-    TFT.print(":");
-    if (minute(tt) < 10) {
-      TFT.print("0");
-    }
-    TFT.print(minute(tt));
-    TFT.print(":");
-    if (second(tt) < 10) {
-      TFT.print("0");
-    }
-    TFT.print(second(tt));
-    TFT.print(" ");
-    TFT.print(day(tt));
-    TFT.print("-");
-    TFT.print(month(tt));
-    TFT.print("-");
-    TFT.print(year(tt));
-    TFT.print(" TZ ");
-    // TFT.print(tt);
-
+    triggerPoints[0] = triggerPoints[1]; //analogRead(ANALOG_IN_PIN1);
   }
-  TFT.setRotation(PORTRAIT);
 }
+
+void triggerPositive() {
+  triggerPoints[0] = analogRead(ANALOG_IN_PIN1);
+  while(notTriggered){
+    triggerPoints[1] = analogRead(ANALOG_IN_PIN1);
+    if ((triggerPoints[1] > triggerValue) && (triggerPoints[0] < triggerValue) ){
+      notTriggered = false;
+    }
+    triggerPoints[0] = triggerPoints[1]; //analogRead(ANALOG_IN_PIN1);
+  }
+}
+
+void triggerNegative() {
+  triggerPoints[0] = analogRead(ANALOG_IN_PIN1);
+  while(notTriggered){
+    triggerPoints[1] = analogRead(ANALOG_IN_PIN1);
+    if ((triggerPoints[1] < triggerValue) && (triggerPoints[0] > triggerValue) ){
+      notTriggered = false;
+    }
+    triggerPoints[0] = triggerPoints[1]; //analogRead(ANALOG_IN_PIN1);
+  }
+}
+
+void incEdgeType() {
+  triggerType += 1;
+  if (triggerType > 2)
+  {
+    triggerType = 0;
+  }
+  /*
+  serial_debug.println(triggerPoints[0]);
+  serial_debug.println(triggerPoints[1]);
+  serial_debug.println(triggerType);
+  */
+}
+
+void blinkLED()
+{
+#if defined(BOARD_LED)
+  digitalWrite(BOARD_LED, LOW);
+  delay(500);
+  digitalWrite(BOARD_LED, HIGH);
 #endif
-#endif
+}
 
 void serialSamples ()
 {
   // Send *all* of the samples to the serial port.
   serial_debug.println("#Time(uS), ADC Number, value, diff");
-  for (int16_t j = 1; j < maxSamples   ; j++ )
+  for (int16_t j = 1; j < MAX_SAMPLES   ; j++ )
   {
     // Time from trigger in milliseconds
-    serial_debug.print((samplingTime / (maxSamples))*j);
+    serial_debug.print((samplingTime / (MAX_SAMPLES))*j);
     serial_debug.print(" ");
     // raw ADC data
     serial_debug.print(j % 2 + 1);
@@ -769,18 +613,6 @@ void decreaseZoomFactor() {
   serial_debug.println(xZoomFactor);
   //clearTFT();
 }
-
-#if defined(USE_ILI9341)
-void clearTrace() {
-  TFTSamples(BEAM_OFF_COLOUR);
-  showGraticule();
-}
-
-void showTrace() {
-  showLabels();
-  TFTSamples(BEAM1_COLOUR);
-}
-#endif
 
 void scrollRight() {
   if (startSample < (endSample - 120)) {
@@ -895,17 +727,14 @@ uint16 timer_set_period(HardwareTimer timer, uint32 microseconds) {
 * @brief Enable DMA requests
 * @param dev ADC device on which to enable DMA requests
 */
-
 void adc_dma_enable(const adc_dev * dev) {
   bb_peri_set_bit(&dev->regs->CR2, ADC_CR2_DMA_BIT, 1);
 }
-
 
 /**
 * @brief Disable DMA requests
 * @param dev ADC device on which to disable DMA requests
 */
-
 void adc_dma_disable(const adc_dev * dev) {
   bb_peri_set_bit(&dev->regs->CR2, ADC_CR2_DMA_BIT, 0);
 }
@@ -956,6 +785,208 @@ void serialCurrentTime() {
 
 }
 #endif
+
+void sleepMode()
+{
+  serial_debug.println("# Nighty night!");
+  // Set PDDS and LPDS bits for standby mode, and set Clear WUF flag (required per datasheet):
+  PWR_BASE->CR |= PWR_CR_CWUF;
+  PWR_BASE->CR |= PWR_CR_PDDS;
+
+  // set sleepdeep in the system control register
+  SCB_BASE->SCR |= SCB_SCR_SLEEPDEEP;
+
+  // Now go into stop mode, wake up on interrupt
+  // disableClocks();
+  asm("wfi");
+}
+
+#if defined(USE_ILI9341)
+void showGraticule()
+{
+  TFT.drawRect(0, 0, myHeight, myWidth, GRATICULE_COLOUR);
+  // Dot grid - ten distinct divisions (9 dots) in both X and Y axis.
+  for (uint16_t TicksX = 1; TicksX < 10; TicksX++)
+  {
+    for (uint16_t TicksY = 1; TicksY < 10; TicksY++)
+    {
+      TFT.drawPixel(  TicksX * (myHeight / 10), TicksY * (myWidth / 10), GRATICULE_COLOUR);
+    }
+  }
+  // Horizontal and Vertical centre lines 5 ticks per grid square with a longer tick in line with our dots
+  for (uint16_t TicksX = 0; TicksX < myWidth; TicksX += (myHeight / 50))
+  {
+    if (TicksX % (myWidth / 10) > 0 )
+    {
+      TFT.drawFastHLine(  (myHeight / 2) - 1 , TicksX, 3, GRATICULE_COLOUR);
+    }
+    else
+    {
+      TFT.drawFastHLine(  (myHeight / 2) - 3 , TicksX, 7, GRATICULE_COLOUR);
+    }
+
+  }
+  for (uint16_t TicksY = 0; TicksY < myHeight; TicksY += (myHeight / 50) )
+  {
+    if (TicksY % (myHeight / 10) > 0 )
+    {
+      TFT.drawFastVLine( TicksY,  (myWidth / 2) - 1 , 3, GRATICULE_COLOUR);
+    }
+    else
+    {
+      TFT.drawFastVLine( TicksY,  (myWidth / 2) - 3 , 7, GRATICULE_COLOUR);
+    }
+  }
+}
+
+void clearTFT()
+{
+  TFT.fillScreen(BEAM_OFF_COLOUR);                // Blank the display
+}
+
+void TFTSamplesClear (uint16_t beamColour)
+{
+  for (signalX=1 ; signalX < myWidth - 2; signalX++)
+  {
+    //use saved data to improve speed
+    TFT.drawLine (  dataPlot[signalX-1], signalX, dataPlot[signalX] , signalX + 1, beamColour) ;
+  }
+}
+
+void TFTSamples (uint16_t beamColour)
+{
+  //calculate first sample
+  signalY =  ((myHeight * dataPoints[0 * ((endSample - startSample) / (myWidth * timeBase / 100)) + 1]) / ANALOG_MAX_VALUE) * (yZoomFactor / 100) + yPosition;
+  dataPlot[0]=signalY * 99 / 100 + 1;
+  
+  for (signalX=1 ; signalX < myWidth - 2; signalX++)
+  {
+    // Scale our samples to fit our screen. Most scopes increase this in steps of 5,10,25,50,100 250,500,1000 etc
+    // Pick the nearest suitable samples for each of our myWidth screen resolution points
+    signalY1 = ((myHeight * dataPoints[(signalX + 1) * ((endSample - startSample) / (myWidth * timeBase / 100)) + 1]) / ANALOG_MAX_VALUE) * (yZoomFactor / 100) + yPosition ;
+    dataPlot[signalX] = signalY1 * 99 / 100 + 1;
+    TFT.drawLine (  dataPlot[signalX-1], signalX, dataPlot[signalX] , signalX + 1, beamColour) ;
+    signalY = signalY1;
+  }
+}
+
+/*
+// Run a bunch of NOOPs to trim the inter ADC conversion gap
+void sweepDelay(unsigned long sweepDelayFactor) {
+  volatile unsigned long i = 0;
+  for (i = 0; i < sweepDelayFactor; i++) {
+    __asm__ __volatile__ ("nop");
+  }
+}
+*/
+
+void showLabels()
+{
+  TFT.setRotation(LANDSCAPE);
+  TFT.setTextSize(1);
+  TFT.setCursor(10, 190);
+  // TFT.print("Y=");
+  //TFT.print((samplingTime * xZoomFactor) / MAX_SAMPLES);
+  TFT.print(float (float(samplingTime) / float(MAX_SAMPLES)));
+
+  TFT.setTextSize(1);
+  TFT.print(" uS/Sample  ");
+  TFT.print(MAX_SAMPLES);
+  TFT.print(" samples ");
+//  TFT.setCursor(10, 190);
+//  TFT.print(displayTime);
+  TFT.print(float (1000000 / float(displayTime)));
+  TFT.print(" fps    ");
+  TFT.setTextSize(2);
+  TFT.setCursor(10, 210);
+  TFT.print("0.3");
+  TFT.setTextSize(1);
+  TFT.print(" V/Div ");
+  TFT.setTextSize(1);
+
+  TFT.print("timeBase=");
+  TFT.print(timeBase);
+  TFT.print(" yzoom=");
+  TFT.print(yZoomFactor);
+  TFT.print(" ypos=");
+  TFT.print(yPosition);
+  //showTime();
+  TFT.setRotation(PORTRAIT);
+}
+
+#if defined(USE_RTC) && defined(USE_TIME_H)
+void showTime ()
+{
+  // Show RTC Time.
+  TFT.setTextSize(1);
+  TFT.setRotation(LANDSCAPE);
+  if (rt.getTime() != tt)
+  {
+    tt = rt.getTime();
+    TFT.setCursor(5, 10);
+    if (hour(tt) < 10) {
+      TFT.print("0");
+    }
+    TFT.print(hour(tt));
+    TFT.print(":");
+    if (minute(tt) < 10) {
+      TFT.print("0");
+    }
+    TFT.print(minute(tt));
+    TFT.print(":");
+    if (second(tt) < 10) {
+      TFT.print("0");
+    }
+    TFT.print(second(tt));
+    TFT.print(" ");
+    TFT.print(day(tt));
+    TFT.print("-");
+    TFT.print(month(tt));
+    TFT.print("-");
+    TFT.print(year(tt));
+    TFT.print(" TZ ");
+    // TFT.print(tt);
+
+  }
+  TFT.setRotation(PORTRAIT);
+}
+#endif
+
+void clearTrace() {
+  TFTSamples(BEAM_OFF_COLOUR);
+  showGraticule();
+}
+
+void showTrace() {
+  showLabels();
+  TFTSamples(BEAM1_COLOUR);
+}
+
+void showCredits() {
+  TFT.setTextSize(2);                           // Small 26 char / line
+  //TFT.setTextColor(CURSOR_COLOUR, BEAM_OFF_COLOUR) ;
+  TFT.setCursor(0, 50);
+  TFT.print(" STM-O-Scope by Andy Hull") ;
+  TFT.setCursor(0, 70);
+  TFT.print("      Inspired by");
+  TFT.setCursor(0, 90);
+  TFT.print("      Ray Burnette.");
+  TFT.setCursor(0, 130);
+  TFT.print("      Victor PV");
+  TFT.setCursor(0, 150);
+  TFT.print("      Roger Clark");
+  TFT.setCursor(0, 170);
+  TFT.print(" and all at stm32duino.com");
+  TFT.setCursor(0, 190);
+  TFT.print(" CH1 Probe STM32F Pin [");
+  TFT.print(ANALOG_IN_PIN1);
+  TFT.print("]");
+  TFT.setCursor(0, 220);
+  TFT.setTextSize(1);
+  TFT.print("     GNU GENERAL PUBLIC LICENSE Version 2 ");
+  TFT.setTextSize(2);
+  TFT.setRotation(PORTRAIT);
+}
 
 #if defined(TOUCH_SCREEN_AVAILABLE)
 void touchCalibrate() {
@@ -1057,32 +1088,6 @@ void readTouch() {
 
 #endif
 
-#if defined(USE_ILI9341)
-void showCredits() {
-  TFT.setTextSize(2);                           // Small 26 char / line
-  //TFT.setTextColor(CURSOR_COLOUR, BEAM_OFF_COLOUR) ;
-  TFT.setCursor(0, 50);
-  TFT.print(" STM-O-Scope by Andy Hull") ;
-  TFT.setCursor(0, 70);
-  TFT.print("      Inspired by");
-  TFT.setCursor(0, 90);
-  TFT.print("      Ray Burnette.");
-  TFT.setCursor(0, 130);
-  TFT.print("      Victor PV");
-  TFT.setCursor(0, 150);
-  TFT.print("      Roger Clark");
-  TFT.setCursor(0, 170);
-  TFT.print(" and all at stm32duino.com");
-  TFT.setCursor(0, 190);
-  TFT.print(" CH1 Probe STM32F Pin [");
-  TFT.print(analogInPin);
-  TFT.print("]");
-  TFT.setCursor(0, 220);
-  TFT.setTextSize(1);
-  TFT.print("     GNU GENERAL PUBLIC LICENSE Version 2 ");
-  TFT.setTextSize(2);
-  TFT.setRotation(PORTRAIT);
-}
 #endif
 
 /* NOT USED
@@ -1113,17 +1118,3 @@ static inline void writeBKP(int registerNumber, int value)
 }
 */
 
-void sleepMode()
-{
-  serial_debug.println("# Nighty night!");
-  // Set PDDS and LPDS bits for standby mode, and set Clear WUF flag (required per datasheet):
-  PWR_BASE->CR |= PWR_CR_CWUF;
-  PWR_BASE->CR |= PWR_CR_PDDS;
-
-  // set sleepdeep in the system control register
-  SCB_BASE->SCR |= SCB_SCR_SLEEPDEEP;
-
-  // Now go into stop mode, wake up on interrupt
-  // disableClocks();
-  asm("wfi");
-}
