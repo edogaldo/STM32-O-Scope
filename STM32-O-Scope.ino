@@ -205,7 +205,10 @@ uint16_t dataPlot[320]; //max(width,height) for this display
 
 // End of DMA indication
 volatile static bool dma1_ch1_Active;
-#define ADC_CR1_FASTINT 0x70000 // Fast interleave mode DUAL MODE bits 19-16
+
+// ADC DUAL MODE bits CR1[19-16]
+//#define ADC_DUAL_MODE 0x70000 // Fast interleave mode
+#define ADC_DUAL_MODE 0x60000 // Regular simultaneous mode
 
 
 
@@ -376,7 +379,7 @@ void setADCs ()
 
   //  adc_reg_map *regs = dev->regs;
   adc_set_reg_seqlen(ADC1, 1);
-  ADC1->regs->CR1 |= ADC_CR1_FASTINT; // Interleaved mode
+  ADC1->regs->CR1 |= ADC_DUAL_MODE; // Interleaved mode
   ADC1->regs->CR2 |= ADC_CR2_CONT; // | ADC_CR2_DMA; // Set continuous mode and DMA (set in takeSamples())
   ADC1->regs->CR2 |= ADC_CR2_SWSTART;
   ADC1->regs->SQR3 = pinMapADCin1;
