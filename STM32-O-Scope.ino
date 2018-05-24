@@ -194,7 +194,7 @@ SerialCommand sCmd;
 
 // Samples - depends on available RAM 6K is about the limit on an STM32F103C8T6
 // Bear in mind that the ILI9341 display is only able to display 240x320 pixels, at any time but we can output far more to the serial port, we effectively only show a window on our samples on the TFT.
-# define maxSamples 1024*6 //1024*6
+# define maxSamples 1024*20 //1024*6
 uint32_t startSample = 0; //10
 uint32_t endSample = maxSamples ;
 
@@ -410,19 +410,21 @@ void showGraticule()
 
 void setADCs ()
 {
+  adc_set_prescaler(ADC_PRE_PCLK2_DIV_6); // Overclock ADC to 18MHz if sysclock is 72MHz
   //  const adc_dev *dev = PIN_MAP[analogInPin].adc_device;
   int pinMapADCin = PIN_MAP[analogInPin].adc_channel;
-  adc_set_sample_rate(ADC1, ADC_SMPR_1_5); //=0,58uS/sample.  ADC_SMPR_13_5 = 1.08uS - use this one if Rin>10Kohm,
+  adc_set_sample_rate(ADC1, ADC_SMPR_1_5);    //=0,58uS/sample.  ADC_SMPR_13_5 = 1.08uS - use this one if Rin>10Kohm,
   adc_set_sample_rate(ADC2, ADC_SMPR_1_5);    // if not may get some sporadic noise. see datasheet.
 
   //  adc_reg_map *regs = dev->regs;
   adc_set_reg_seqlen(ADC1, 1);
-  ADC1->regs->SQR3 = pinMapADCin;
-  ADC1->regs->CR2 |= ADC_CR2_CONT; // | ADC_CR2_DMA; // Set continuous mode and DMA
   ADC1->regs->CR1 |= ADC_CR1_FASTINT; // Interleaved mode
+  ADC1->regs->CR2 |= ADC_CR2_CONT; // | ADC_CR2_DMA; // Set continuous mode and DMA (set in takeSamples())
   ADC1->regs->CR2 |= ADC_CR2_SWSTART;
+  ADC1->regs->SQR3 = pinMapADCin;
 
   ADC2->regs->CR2 |= ADC_CR2_CONT; // ADC 2 continuos
+  ADC2->regs->CR2 |= ADC_CR2_SWSTART;
   ADC2->regs->SQR3 = pinMapADCin;
 }
 
@@ -1125,4 +1127,3 @@ void sleepMode()
   // disableClocks();
   asm("wfi");
 }
-
