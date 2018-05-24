@@ -137,9 +137,7 @@ int16_t myHeight ;
 
 #endif
 
-#define BOARD_LED           PC13      //PB0
-// LED - blinks on trigger events - leave this undefined if your board has no controllable LED
-// define as PC13 on the "Red/Blue Pill" boards and PD2 on the "Yellow Pill R"
+
 #define TEST_WAVE_PIN       PB1       //PB1 PWM 500 Hz 
 // Analog input
 #define ANALOG_MAX_VALUE    4096
@@ -215,12 +213,12 @@ volatile static bool dma1_ch1_Active;
 void setup()
 {
 
-#if defined(BOARD_LED)
-  // BOARD_LED blinks on triggering assuming you have an LED on your board. If not simply dont't define it at the start of the sketch.
-  pinMode(BOARD_LED, OUTPUT);
-  digitalWrite(BOARD_LED, HIGH);
+#if defined(LED_BUILTIN)
+  // LED_BUILTIN blinks on triggering assuming you have an LED on your board. If not simply dont't define it at the start of the sketch.
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
   delay(1000);
-  digitalWrite(BOARD_LED, LOW);
+  digitalWrite(LED_BUILTIN, LOW);
   delay(1000);
 #endif
 #if defined(USE_ILI9341)
@@ -497,10 +495,10 @@ void toggleEdgeType() {
 
 void blinkLED()
 {
-#if defined(BOARD_LED)
-  digitalWrite(BOARD_LED, LOW);
+#if defined(LED_BUILTIN)
+  digitalWrite(LED_BUILTIN, LOW);
   delay(500);
-  digitalWrite(BOARD_LED, HIGH);
+  digitalWrite(LED_BUILTIN, HIGH);
 #endif
 }
 
