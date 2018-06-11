@@ -44,4 +44,26 @@ URTouch  myTouch( PB12, PB13, PB14, PB15, PA8);
 
 #endif
 
+//#if defined(USE_ILI9341)
+// Additional  display specific signals (i.e. non SPI) for STM32F103C8T6 (Wire colour)
+#define TFT_DC      PA0      //   (Green) 
+#define TFT_CS      PA1      //   (Orange) 
+#define TFT_RST     PA2      //   (Yellow)
+#define TFT_LED     PA3      // Backlight 
+// Display colours
+#define BEAM1_COLOUR       ILI9341_GREEN
+#define BEAM2_COLOUR       ILI9341_RED
+#define GRATICULE_COLOUR   0x07FF
+#define BEAM_OFF_COLOUR    ILI9341_BLACK
+#define CURSOR_COLOUR      ILI9341_GREEN
+
+// Create the lcd object
+Adafruit_ILI9341_STM TFT = Adafruit_ILI9341_STM(TFT_CS, TFT_DC, TFT_RST); // Using hardware SPI
+
+// Variables for the beam position
+uint16_t signalX ;
+uint16_t signalY ;
+uint16_t signalY1;
+
+//#endif
 

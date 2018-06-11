@@ -12,7 +12,7 @@
 // 1024*24 = 24576 samples = 48KB is about the limit on an STM32F103ZET6 (64KB ram available)
 // Bear in mind that the ILI9341 display is only able to display 240x320 pixels, at any time but we can output far more to the serial port, we effectively only show a window on our samples on the TFT.
 
-//#define USE_ILI9341
+#define USE_ILI9341
 //#define USE_TOUCH_SCREEN
 
 #if defined(USE_ILI9341)
